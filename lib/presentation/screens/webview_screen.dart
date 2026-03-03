@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -24,10 +26,12 @@ class WebViewScreen extends ConsumerStatefulWidget {
 class _WebViewScreenState extends ConsumerState<WebViewScreen> {
   late final WebViewController _controller;
   bool _isLoading = true;
-  int _errorCount = 0;
+  bool _hasError = false;
+  bool _pageLoaded = false;
   String? _lastError;
   String? _currentUrl;
   String? _blockedUrl;
+  Timer? _loadingTimer;
 
   final List<String> _blockedSchemes = [
     'zhihu://',
@@ -49,6 +53,12 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
     _initWebView();
   }
 
+  @override
+  void dispose() {
+    _loadingTimer?.cancel();
+    super.dispose();
+  }
+
   void _recordReadHistory() {
     if (widget.news != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -61,39 +71,50 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setUserAgent('Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36')
+      ..setBackgroundColor(Colors.white)
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String url) {
             debugPrint('WebView loading: $url');
             setState(() {
               _isLoading = true;
+              _hasError = false;
+              _pageLoaded = false;
               _lastError = null;
               _currentUrl = url;
             });
           },
           onPageFinished: (String url) {
             debugPrint('WebView finished: $url');
+            _loadingTimer?.cancel();
             setState(() {
               _isLoading = false;
-              _errorCount = 0;
+              _pageLoaded = true;
               _currentUrl = url;
             });
           },
           onWebResourceError: (WebResourceError error) {
-            debugPrint('WebView error: ${error.description}');
+            debugPrint('WebView error: ${error.errorType} - ${error.description}');
+            
+            if (_pageLoaded) {
+              debugPrint('Page already loaded, ignoring resource error');
+              return;
+            }
+            
             final isConnectionReset = error.description.contains('ERR_CONNECTION_RESET') ||
                 error.description.contains('net::ERR_CONNECTION_RESET');
+            
             if (isConnectionReset) {
               _retryWithAlternateUrl();
               return;
             }
-            _errorCount++;
-            _lastError = error.description;
-            if (_errorCount >= 3) {
-              setState(() {
-                _isLoading = false;
-              });
-            }
+            
+            _controller.loadHtmlString('<html><body></body></html>');
+            setState(() {
+              _hasError = true;
+              _isLoading = false;
+              _lastError = error.description;
+            });
           },
           onNavigationRequest: (NavigationRequest request) {
             final url = request.url;
@@ -110,8 +131,41 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
       );
     
     debugPrint('WebView loading: ${widget.url}');
-    if (widget.url.isNotEmpty) {
-      _controller.loadRequest(Uri.parse(widget.url));
+    _loadUrl();
+  }
+
+  Future<void> _loadUrl() async {
+    if (widget.url.isEmpty) {
+      setState(() {
+        _hasError = true;
+        _lastError = '无效的链接';
+      });
+      return;
+    }
+    
+    _pageLoaded = false;
+    _loadingTimer?.cancel();
+    _loadingTimer = Timer(const Duration(seconds: 10), () {
+      if (_isLoading && !_hasError && !_pageLoaded) {
+        debugPrint('Loading timeout, showing error page');
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+          _lastError = '网页加载超时';
+        });
+      }
+    });
+    
+    try {
+      await _controller.loadRequest(Uri.parse(widget.url));
+    } catch (e) {
+      debugPrint('Load request failed: $e');
+      _loadingTimer?.cancel();
+      setState(() {
+        _hasError = true;
+        _isLoading = false;
+        _lastError = e.toString();
+      });
     }
   }
 
@@ -124,13 +178,17 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
         await _controller.loadRequest(Uri.parse(httpUrl));
       } catch (e) {
         debugPrint('HTTP retry failed: $e');
+        await _controller.loadHtmlString('<html><body></body></html>');
         setState(() {
+          _hasError = true;
           _isLoading = false;
           _lastError = '无法加载网页';
         });
       }
     } else {
+      await _controller.loadHtmlString('<html><body></body></html>');
       setState(() {
+        _hasError = true;
         _isLoading = false;
         _lastError = '无法加载网页';
       });
@@ -209,8 +267,10 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
             icon: const Icon(Icons.refresh),
             onPressed: () {
               setState(() {
-                _errorCount = 0;
+                _hasError = false;
+                _pageLoaded = false;
                 _lastError = null;
+                _isLoading = true;
               });
               _controller.reload();
             },
@@ -271,11 +331,12 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
       ),
       body: Stack(
         children: [
-          WebViewWidget(controller: _controller),
+          if (_hasError)
+            Positioned.fill(child: _buildErrorView())
+          else
+            WebViewWidget(controller: _controller),
           if (_isLoading)
             const LinearProgressIndicator(),
-          if (_lastError != null && !_isLoading && _currentUrl == null)
-            _buildErrorView(),
           if (_blockedUrl != null)
             Positioned(
               left: 0,
