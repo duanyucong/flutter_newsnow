@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
+import 'package:pinyin/pinyin.dart';
 import '../core/constants/app_constants.dart';
 import '../data/models/news_item.dart';
 import '../data/models/news.dart';
@@ -171,7 +172,29 @@ List<News> _interleaveBySource(List<SourceResponse> responses) {
     }
   }
   
-  return result;
+  return _sortNews(result);
+}
+
+List<News> _sortNews(List<News> news) {
+  final sorted = List<News>.from(news);
+  sorted.sort((a, b) {
+    final timestampCompare = b.timestamp.compareTo(a.timestamp);
+    if (timestampCompare != 0) return timestampCompare;
+    
+    final aFirstLetter = _getFirstLetter(a.title);
+    final bFirstLetter = _getFirstLetter(b.title);
+    return aFirstLetter.compareTo(bFirstLetter);
+  });
+  return sorted;
+}
+
+String _getFirstLetter(String title) {
+  if (title.isEmpty) return '';
+  final pinyin = PinyinHelper.getFirstWordPinyin(title);
+  if (pinyin.isEmpty || !pinyin.contains(RegExp(r'[a-zA-Z]'))) {
+    return title[0].toUpperCase();
+  }
+  return pinyin[0].toUpperCase();
 }
 
 final hotNewsProvider = StateNotifierProvider<HotNewsNotifier, AsyncValue<List<News>>>((ref) {

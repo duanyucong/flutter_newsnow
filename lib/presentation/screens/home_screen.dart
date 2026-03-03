@@ -19,8 +19,8 @@ class HomeScreen extends ConsumerWidget {
       body: IndexedStack(
         index: currentIndex,
         children: const [
-          HotScreen(),
           LiveScreen(),
+          HotScreen(),
           FollowScreen(),
           ProfileScreen(),
         ],
@@ -40,14 +40,14 @@ class HomeScreen extends ConsumerWidget {
           },
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.whatshot_outlined),
-              activeIcon: Icon(Icons.whatshot),
-              label: '热点',
-            ),
-            BottomNavigationBarItem(
               icon: Icon(Icons.access_time_outlined),
               activeIcon: Icon(Icons.access_time_filled),
               label: '实时',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.whatshot_outlined),
+              activeIcon: Icon(Icons.whatshot),
+              label: '热点',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.favorite_outline),
