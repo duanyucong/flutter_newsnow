@@ -23,85 +23,84 @@ class HotScreen extends ConsumerWidget {
               onRefresh: () async {
                 await ref.read(hotNewsProvider.notifier).refresh();
               },
-              child: CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '热点',
-                            style: theme.textTheme.headlineLarge,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '实时热门资讯',
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 16)),
-                  newsAsync.when(
-                    loading: () => const SliverToBoxAdapter(
-                      child: Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(32),
-                          child: CircularProgressIndicator(),
+              child: () {
+                final scrollController = ref.watch(scrollControllersProvider)[1];
+                return CustomScrollView(
+                  controller: scrollController,
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '热点',
+                              style: theme.textTheme.headlineLarge,
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                    error: (error, _) => SliverToBoxAdapter(
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32),
-                          child: Column(
-                            children: [
-                              Text('加载失败: $error'),
-                              const SizedBox(height: 16),
-                              ElevatedButton(
-                                onPressed: () => ref.read(hotNewsProvider.notifier).refresh(),
-                                child: const Text('重试'),
-                              ),
-                            ],
+                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                    newsAsync.when(
+                      loading: () => const SliverToBoxAdapter(
+                        child: Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(32),
+                            child: CircularProgressIndicator(),
                           ),
                         ),
                       ),
-                    ),
-                    data: (news) => SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            if (index == news.length) {
-                              return const Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Center(
-                                  child: Text('没有更多了'),
+                      error: (error, _) => SliverToBoxAdapter(
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(32),
+                            child: Column(
+                              children: [
+                                Text('加载失败: $error'),
+                                const SizedBox(height: 16),
+                                ElevatedButton(
+                                  onPressed: () => ref.read(hotNewsProvider.notifier).refresh(),
+                                  child: const Text('重试'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      data: (news) => SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        sliver: SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              if (index == news.length) {
+                                return const Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: Center(
+                                    child: Text('没有更多了'),
+                                  ),
+                                );
+                              }
+                              final item = news[index];
+                              final sourceConfig = Sources.getSource(item.sourceId);
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: NewsCard(
+                                  news: item,
+                                  onTap: () => _openWebView(context, item, sourceConfig),
                                 ),
                               );
-                            }
-                            final item = news[index];
-                            final sourceConfig = Sources.getSource(item.sourceId);
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: NewsCard(
-                                news: item,
-                                onTap: () => _openWebView(context, item, sourceConfig),
-                              ),
-                            );
-                          },
-                          childCount: news.length + 1,
+                            },
+                            childCount: news.length + 1,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 80)),
-                ],
-              ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                  ],
+                );
+              }(),
             ),
           ),
         ],

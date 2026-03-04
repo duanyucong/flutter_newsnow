@@ -45,27 +45,31 @@ class FollowScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                data: (news) => ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: news.length + 1,
-                  itemBuilder: (context, index) {
-                    if (index == news.length) {
-                      return const Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Center(child: Text('暂无更多')),
+                data: (news) {
+                  final scrollController = ref.watch(scrollControllersProvider)[2];
+                  return ListView.builder(
+                    controller: scrollController,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: news.length + 1,
+                    itemBuilder: (context, index) {
+                      if (index == news.length) {
+                        return const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(child: Text('暂无更多')),
+                        );
+                      }
+                      final item = news[index];
+                      final sourceConfig = Sources.getSource(item.sourceId);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: NewsCard(
+                          news: item,
+                          onTap: () => _openWebView(context, item, sourceConfig),
+                        ),
                       );
-                    }
-                    final item = news[index];
-                    final sourceConfig = Sources.getSource(item.sourceId);
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: NewsCard(
-                        news: item,
-                        onTap: () => _openWebView(context, item, sourceConfig),
-                      ),
-                    );
-                  },
-                ),
+                    },
+                  );
+                },
               ),
             ),
           ),

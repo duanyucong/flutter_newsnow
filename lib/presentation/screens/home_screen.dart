@@ -36,7 +36,20 @@ class HomeScreen extends ConsumerWidget {
         child: BottomNavigationBar(
           currentIndex: currentIndex,
           onTap: (index) {
-            ref.read(currentNavIndexProvider.notifier).state = index;
+            if (index == currentIndex) {
+              // 二次点击，滚动到顶部
+              final scrollController = ref.read(scrollControllersProvider)[index];
+              if (scrollController != null) {
+                scrollController.animateTo(
+                  0,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                );
+              }
+            } else {
+              // 切换页面
+              ref.read(currentNavIndexProvider.notifier).state = index;
+            }
           },
           items: const [
             BottomNavigationBarItem(

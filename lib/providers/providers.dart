@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'package:pinyin/pinyin.dart';
@@ -520,3 +521,14 @@ class FollowSourcesNotifier extends StateNotifier<List<FollowSourceState>> {
   List<String> get subscribedSourceIds =>
       state.where((s) => s.isSubscribed).map((s) => s.id).toList();
 }
+
+final currentNavIndexProvider = StateProvider<int>((ref) => 0);
+
+final scrollControllersProvider = Provider<Map<int, ScrollController>>((ref) {
+  return {
+    0: ScrollController(), // LiveScreen
+    1: ScrollController(), // HotScreen
+    2: ScrollController(), // FollowScreen
+    3: ScrollController(), // ProfileScreen
+  };
+});

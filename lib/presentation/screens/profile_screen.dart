@@ -19,9 +19,11 @@ class ProfileScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final user = User.defaultUser;
 
+    final scrollController = ref.watch(scrollControllersProvider)[3];
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: SingleChildScrollView(
+        controller: scrollController,
         child: Column(
           children: [
             _buildHeader(context, user, theme),

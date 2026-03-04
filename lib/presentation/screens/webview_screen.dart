@@ -32,6 +32,8 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
   String? _currentUrl;
   String? _blockedUrl;
   Timer? _loadingTimer;
+  int _retryCount = 0;
+  static const int _maxRetries = 3;
 
   final List<String> _blockedSchemes = [
     'zhihu://',
@@ -70,8 +72,22 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
   void _initWebView() {
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setUserAgent('Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36')
+      ..setUserAgent('Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36')
       ..setBackgroundColor(Colors.white)
+      ..enableZoom(false)
+      ..setOnConsoleMessage((JavaScriptConsoleMessage message) {
+        // 过滤掉已知的非关键错误日志
+        final ignoredPatterns = [
+          "Failed to execute 'write' on 'Document'",
+          "count.php",
+        ];
+        final shouldIgnore = ignoredPatterns.any(
+          (pattern) => message.message.contains(pattern),
+        );
+        if (!shouldIgnore) {
+          debugPrint('WebView Console [${message.level.name}]: ${message.message}');
+        }
+      })
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String url) {
@@ -94,10 +110,17 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
             });
           },
           onWebResourceError: (WebResourceError error) {
-            debugPrint('WebView error: ${error.errorType} - ${error.description}');
+            debugPrint('WebView error: ${error.errorType} - ${error.description} (isMainFrame: ${error.isForMainFrame})');
             
+            // 页面已加载完成，忽略资源错误（如图片、广告等加载失败）
             if (_pageLoaded) {
               debugPrint('Page already loaded, ignoring resource error');
+              return;
+            }
+            
+            // 非主框架的错误（如 iframe、图片、脚本等），不视为页面加载失败
+            if (error.isForMainFrame == false) {
+              debugPrint('Non-main frame error, ignoring');
               return;
             }
             
@@ -105,7 +128,17 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
                 error.description.contains('net::ERR_CONNECTION_RESET');
             
             if (isConnectionReset) {
-              _retryWithAlternateUrl();
+              _loadingTimer?.cancel();
+              _attemptRetry(widget.url);
+              return;
+            }
+            
+            final isTimeout = error.description.contains('ERR_TIMED_OUT') ||
+                error.description.contains('net::ERR_CONNECTION_TIMED_OUT');
+            
+            if (isTimeout) {
+              _loadingTimer?.cancel();
+              _attemptRetry(widget.url);
               return;
             }
             
@@ -169,6 +202,58 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
     }
   }
 
+  Future<void> _loadUrlWithRetry(String url, {bool isRetry = false}) async {
+    _pageLoaded = false;
+    _loadingTimer?.cancel();
+    
+    if (!isRetry) {
+      _retryCount = 0;
+    }
+    
+    _loadingTimer = Timer(const Duration(seconds: 10), () {
+      if (_isLoading && !_hasError && !_pageLoaded) {
+        debugPrint('Loading timeout, attempting retry ${_retryCount + 1}/$_maxRetries');
+        _attemptRetry(url);
+      }
+    });
+    
+    try {
+      await _controller.loadRequest(Uri.parse(url));
+    } catch (e) {
+      debugPrint('Load request failed: $e');
+      _loadingTimer?.cancel();
+      _attemptRetry(url);
+    }
+  }
+
+  void _attemptRetry(String url) {
+    if (_retryCount < _maxRetries) {
+      _retryCount++;
+      debugPrint('Retrying... attempt $_retryCount/$_maxRetries');
+      
+      // 延迟重试，给网络一些恢复时间
+      Future.delayed(Duration(seconds: _retryCount), () {
+        if (mounted) {
+          // 尝试使用不同协议
+          String retryUrl = url;
+          if (url.startsWith('https://') && _retryCount == 1) {
+            retryUrl = url.replaceFirst('https://', 'http://');
+            debugPrint('Switching to HTTP: $retryUrl');
+          }
+          _loadUrlWithRetry(retryUrl, isRetry: true);
+        }
+      });
+    } else {
+      // 重试次数用尽，显示错误
+      _controller.loadHtmlString('<html><body></body></html>');
+      setState(() {
+        _hasError = true;
+        _isLoading = false;
+        _lastError = '网络连接失败，请检查网络后重试';
+      });
+    }
+  }
+
   Future<void> _retryWithAlternateUrl() async {
     final url = widget.url;
     if (url.startsWith('https://')) {
@@ -225,9 +310,32 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
 
   Future<void> _openInBrowser(String? url) async {
     if (url == null || url.isEmpty) return;
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      final uri = Uri.parse(url);
+      debugPrint('Attempting to open URL: $url');
+      
+      final canLaunch = await canLaunchUrl(uri);
+      debugPrint('Can launch URL: $canLaunch');
+      
+      if (canLaunch) {
+        debugPrint('Launching URL with mode: LaunchMode.externalApplication');
+        final result = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        debugPrint('Launch result: $result');
+      } else {
+        debugPrint('Cannot launch URL: $url');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('无法打开链接')),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error opening URL: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('打开链接失败: $e')),
+        );
+      }
     }
   }
 
@@ -271,6 +379,7 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
                 _pageLoaded = false;
                 _lastError = null;
                 _isLoading = true;
+                _retryCount = 0;
               });
               _controller.reload();
             },
@@ -335,8 +444,7 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
             Positioned.fill(child: _buildErrorView())
           else
             WebViewWidget(controller: _controller),
-          if (_isLoading)
-            const LinearProgressIndicator(),
+
           if (_blockedUrl != null)
             Positioned(
               left: 0,

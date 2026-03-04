@@ -34,39 +34,43 @@ class LiveScreen extends ConsumerWidget {
               ],
             ),
           ),
-          data: (news) => CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(
-                    '实时',
-                    style: theme.textTheme.headlineLarge,
+          data: (news) {
+            final scrollController = ref.watch(scrollControllersProvider)[0];
+            return CustomScrollView(
+              controller: scrollController,
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      '实时',
+                      style: theme.textTheme.headlineLarge,
+                    ),
                   ),
                 ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      if (index == news.length) {
-                        return const Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Center(child: Text('暂无更多')),
-                        );
-                      }
-                      final item = news[index];
-                      final sourceConfig = Sources.getSource(item.sourceId);
-                      return _buildTimelineItem(context, item, sourceConfig);
-                    },
-                    childCount: news.length + 1,
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        if (index == news.length) {
+                          return const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Center(child: Text('暂无更多')),
+                          );
+                        }
+                        final item = news[index];
+                        final sourceConfig = Sources.getSource(item.sourceId);
+                        return _buildTimelineItem(context, item, sourceConfig);
+                      },
+                      childCount: news.length + 1,
+                    ),
                   ),
                 ),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 80)),
-            ],
-          ),
+                const SliverToBoxAdapter(child: SizedBox(height: 80)),
+              ],
+            );
+          },
         ),
       ),
     );
