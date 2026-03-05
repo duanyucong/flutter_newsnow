@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../data/models/news.dart';
 import '../../providers/providers.dart';
+import 'browser_settings_screen.dart';
 
 class WebViewScreen extends ConsumerStatefulWidget {
   final String url;
@@ -35,6 +36,8 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
   int _retryCount = 0;
   static const int _maxRetries = 3;
   late bool _isDarkMode;
+  String? _lastNavigatedUrl;
+  int _redirectCount = 0;
 
   final List<String> _blockedSchemes = [
     'zhihu://',
@@ -52,7 +55,7 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
   @override
   void initState() {
     super.initState();
-    _isDarkMode = _calculateIsDarkMode();
+    _isDarkMode = _calculateIsDarkMode() || ref.read(webViewSettingsProvider).darkModeEnabled;
     _recordReadHistory();
     _initWebView();
   }
@@ -79,13 +82,18 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
   }
 
   void _initWebView() {
+    final webViewSettings = ref.read(webViewSettingsProvider);
     final bgColor = _isDarkMode ? Colors.black : Colors.white;
     
+    final userAgent = webViewSettings.desktopMode
+        ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        : 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+    
     _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setUserAgent('Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36')
+      ..setJavaScriptMode(webViewSettings.javascriptEnabled ? JavaScriptMode.unrestricted : JavaScriptMode.disabled)
+      ..setUserAgent(userAgent)
       ..setBackgroundColor(bgColor)
-      ..enableZoom(false)
+      ..enableZoom(!webViewSettings.noImageMode)
       ..setOnConsoleMessage((JavaScriptConsoleMessage message) {
         // 过滤掉已知的非关键错误日志
         final ignoredPatterns = [
@@ -119,7 +127,11 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
               _pageLoaded = true;
               _currentUrl = url;
             });
-            _injectDarkModeCss();
+            Future.delayed(const Duration(milliseconds: 500), () {
+              if (mounted) {
+                _injectDarkModeCss();
+              }
+            });
           },
           onWebResourceError: (WebResourceError error) {
             debugPrint('WebView error: ${error.errorType} - ${error.description} (isMainFrame: ${error.isForMainFrame})');
@@ -169,6 +181,24 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
               _showBlockedBanner(url);
               return NavigationDecision.prevent;
             }
+            
+            if (_lastNavigatedUrl != null) {
+              final lastUri = Uri.tryParse(_lastNavigatedUrl!);
+              final currentUri = Uri.tryParse(url);
+              if (lastUri != null && currentUri != null) {
+                if (lastUri.host == currentUri.host && 
+                    _normalizePath(lastUri.path) == _normalizePath(currentUri.path)) {
+                  _redirectCount++;
+                  if (_redirectCount > 2) {
+                    debugPrint('Prevented infinite redirect loop');
+                    return NavigationDecision.prevent;
+                  }
+                } else {
+                  _redirectCount = 0;
+                }
+              }
+            }
+            _lastNavigatedUrl = url;
             
             return NavigationDecision.navigate;
           },
@@ -336,6 +366,10 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
     return false;
   }
 
+  String _normalizePath(String path) {
+    return path.replaceAll(RegExp(r'^/+'), '').replaceAll(RegExp(r'/+$'), '');
+  }
+
   void _showBlockedBanner(String url) {
     setState(() {
       _blockedUrl = url;
@@ -460,6 +494,25 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
                 case 'darkMode':
                   _toggleDarkMode();
                   break;
+                case 'settings':
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const BrowserSettingsScreen()),
+                  ).then((_) {
+                    // 设置更改后重新初始化 WebView
+                    final newSettings = ref.read(webViewSettingsProvider);
+                    final newDarkMode = _calculateIsDarkMode() || newSettings.darkModeEnabled;
+                    if (newSettings.javascriptEnabled != ref.read(webViewSettingsProvider).javascriptEnabled ||
+                        newSettings.desktopMode != ref.read(webViewSettingsProvider).desktopMode ||
+                        newSettings.noImageMode != ref.read(webViewSettingsProvider).noImageMode ||
+                        newDarkMode != _isDarkMode) {
+                      setState(() {
+                        _isDarkMode = newDarkMode;
+                      });
+                      _initWebView();
+                    }
+                  });
+                  break;
               }
             },
             itemBuilder: (context) => [
@@ -500,6 +553,16 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
                     Icon(_isDarkMode ? Icons.light_mode : Icons.dark_mode),
                     const SizedBox(width: 8),
                     Text(_isDarkMode ? '浅色模式' : '深色模式'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'settings',
+                child: Row(
+                  children: [
+                    Icon(Icons.settings),
+                    SizedBox(width: 8),
+                    Text('浏览设置'),
                   ],
                 ),
               ),

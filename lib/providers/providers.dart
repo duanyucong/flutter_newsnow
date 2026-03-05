@@ -26,6 +26,123 @@ final screenRotationProvider = StateNotifierProvider<ScreenRotationNotifier, Scr
   return ScreenRotationNotifier();
 });
 
+class WebViewSettings {
+  final bool javascriptEnabled;
+  final bool darkModeEnabled;
+  final bool adBlockEnabled;
+  final bool noImageMode;
+  final bool desktopMode;
+  final int textSize;
+
+  const WebViewSettings({
+    this.javascriptEnabled = true,
+    this.darkModeEnabled = false,
+    this.adBlockEnabled = true,
+    this.noImageMode = false,
+    this.desktopMode = false,
+    this.textSize = 16,
+  });
+
+  WebViewSettings copyWith({
+    bool? javascriptEnabled,
+    bool? darkModeEnabled,
+    bool? adBlockEnabled,
+    bool? noImageMode,
+    bool? desktopMode,
+    int? textSize,
+  }) {
+    return WebViewSettings(
+      javascriptEnabled: javascriptEnabled ?? this.javascriptEnabled,
+      darkModeEnabled: darkModeEnabled ?? this.darkModeEnabled,
+      adBlockEnabled: adBlockEnabled ?? this.adBlockEnabled,
+      noImageMode: noImageMode ?? this.noImageMode,
+      desktopMode: desktopMode ?? this.desktopMode,
+      textSize: textSize ?? this.textSize,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'javascriptEnabled': javascriptEnabled,
+      'darkModeEnabled': darkModeEnabled,
+      'adBlockEnabled': adBlockEnabled,
+      'noImageMode': noImageMode,
+      'desktopMode': desktopMode,
+      'textSize': textSize,
+    };
+  }
+
+  factory WebViewSettings.fromJson(Map<String, dynamic> json) {
+    return WebViewSettings(
+      javascriptEnabled: json['javascriptEnabled'] ?? true,
+      darkModeEnabled: json['darkModeEnabled'] ?? false,
+      adBlockEnabled: json['adBlockEnabled'] ?? true,
+      noImageMode: json['noImageMode'] ?? false,
+      desktopMode: json['desktopMode'] ?? false,
+      textSize: json['textSize'] ?? 16,
+    );
+  }
+}
+
+final webViewSettingsProvider = StateNotifierProvider<WebViewSettingsNotifier, WebViewSettings>((ref) {
+  return WebViewSettingsNotifier();
+});
+
+class WebViewSettingsNotifier extends StateNotifier<WebViewSettings> {
+  WebViewSettingsNotifier() : super(const WebViewSettings()) {
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    final settingsJson = prefs.getString(AppConstants.webviewSettingsKey);
+    if (settingsJson != null) {
+      try {
+        final map = json.decode(settingsJson) as Map<String, dynamic>;
+        state = WebViewSettings.fromJson(map);
+      } catch (e) {
+        debugPrint('Failed to load webview settings: $e');
+      }
+    }
+  }
+
+  Future<void> _saveSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    final settingsJson = json.encode(state.toJson());
+    await prefs.setString(AppConstants.webviewSettingsKey, settingsJson);
+  }
+
+  void setJavascriptEnabled(bool value) {
+    state = state.copyWith(javascriptEnabled: value);
+    _saveSettings();
+  }
+
+  void setDarkModeEnabled(bool value) {
+    state = state.copyWith(darkModeEnabled: value);
+    _saveSettings();
+  }
+
+  void setAdBlockEnabled(bool value) {
+    state = state.copyWith(adBlockEnabled: value);
+    _saveSettings();
+  }
+
+  void setNoImageMode(bool value) {
+    state = state.copyWith(noImageMode: value);
+    _saveSettings();
+  }
+
+  void setDesktopMode(bool value) {
+    state = state.copyWith(desktopMode: value);
+    _saveSettings();
+  }
+
+  void setTextSize(int value) {
+    state = state.copyWith(textSize: value);
+    _saveSettings();
+  }
+}
+
 class ThemeModeNotifier extends StateNotifier<AppThemeMode> {
   ThemeModeNotifier() : super(AppThemeMode.system) {
     _loadTheme();

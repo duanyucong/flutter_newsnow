@@ -8,6 +8,7 @@ import '../../providers/providers.dart';
 import 'subscription_screen.dart';
 import 'bookmarks_screen.dart';
 import 'read_history_screen.dart';
+import 'browser_settings_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -247,6 +248,17 @@ class ProfileScreen extends ConsumerWidget {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const SubscriptionScreen()),
+              ),
+            ),
+            _buildDivider(theme),
+            _buildMenuItem(
+              context: context,
+              icon: Icons.settings,
+              iconColor: Colors.cyan,
+              title: '浏览设置',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const BrowserSettingsScreen()),
               ),
             ),
             _buildDivider(theme),

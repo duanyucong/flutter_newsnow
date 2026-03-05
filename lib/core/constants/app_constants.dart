@@ -12,6 +12,7 @@ class AppConstants {
   static const String subscriptionsKey = 'subscriptions';
   static const String readHistoryKey = 'read_history';
   static const String screenRotationKey = 'screen_rotation';
+  static const String webviewSettingsKey = 'webview_settings';
   
   // Max read history count
   static const int maxReadHistoryCount = 300;
