@@ -34,6 +34,7 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
   Timer? _loadingTimer;
   int _retryCount = 0;
   static const int _maxRetries = 3;
+  late bool _isDarkMode;
 
   final List<String> _blockedSchemes = [
     'zhihu://',
@@ -51,8 +52,16 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
   @override
   void initState() {
     super.initState();
+    _isDarkMode = _calculateIsDarkMode();
     _recordReadHistory();
     _initWebView();
+  }
+
+  bool _calculateIsDarkMode() {
+    final themeMode = ref.read(themeModeProvider);
+    if (themeMode == AppThemeMode.dark) return true;
+    if (themeMode == AppThemeMode.light) return false;
+    return WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
   }
 
   @override
@@ -70,10 +79,12 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
   }
 
   void _initWebView() {
+    final bgColor = _isDarkMode ? Colors.black : Colors.white;
+    
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setUserAgent('Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36')
-      ..setBackgroundColor(Colors.white)
+      ..setBackgroundColor(bgColor)
       ..enableZoom(false)
       ..setOnConsoleMessage((JavaScriptConsoleMessage message) {
         // 过滤掉已知的非关键错误日志
@@ -108,6 +119,7 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
               _pageLoaded = true;
               _currentUrl = url;
             });
+            _injectDarkModeCss();
           },
           onWebResourceError: (WebResourceError error) {
             debugPrint('WebView error: ${error.errorType} - ${error.description} (isMainFrame: ${error.isForMainFrame})');
@@ -165,6 +177,41 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
     
     debugPrint('WebView loading: ${widget.url}');
     _loadUrl();
+  }
+
+  Future<void> _injectDarkModeCss() async {
+    if (_isDarkMode) {
+      await _controller.runJavaScript('''
+        (function() {
+          if (!document.getElementById('dark-mode-style')) {
+            var style = document.createElement('style');
+            style.id = 'dark-mode-style';
+            style.innerHTML = `
+              html {
+                filter: invert(1) hue-rotate(180deg) !important;
+                background-color: #000 !important;
+              }
+              img, video, picture, canvas, svg, [style*="background-image"] {
+                filter: invert(1) hue-rotate(180deg) !important;
+              }
+              body {
+                background-color: #000 !important;
+              }
+            `;
+            document.head.appendChild(style);
+          }
+        })();
+      ''');
+    } else {
+      await _controller.runJavaScript('''
+        (function() {
+          var style = document.getElementById('dark-mode-style');
+          if (style) {
+            style.remove();
+          }
+        })();
+      ''');
+    }
   }
 
   Future<void> _loadUrl() async {
@@ -308,6 +355,15 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
     }
   }
 
+  void _toggleDarkMode() {
+    setState(() {
+      _isDarkMode = !_isDarkMode;
+    });
+    if (_pageLoaded) {
+      _injectDarkModeCss();
+    }
+  }
+
   Future<void> _openInBrowser(String? url) async {
     if (url == null || url.isEmpty) return;
     try {
@@ -401,6 +457,9 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
                 case 'browser':
                   _openInBrowser(widget.url);
                   break;
+                case 'darkMode':
+                  _toggleDarkMode();
+                  break;
               }
             },
             itemBuilder: (context) => [
@@ -431,6 +490,16 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
                     Icon(Icons.open_in_browser),
                     SizedBox(width: 8),
                     Text('用浏览器打开'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'darkMode',
+                child: Row(
+                  children: [
+                    Icon(_isDarkMode ? Icons.light_mode : Icons.dark_mode),
+                    const SizedBox(width: 8),
+                    Text(_isDarkMode ? '浅色模式' : '深色模式'),
                   ],
                 ),
               ),
