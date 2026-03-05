@@ -507,6 +507,8 @@ class ProfileScreen extends ConsumerWidget {
   }
 
   void _showAboutDialog(BuildContext context) {
+    final theme = Theme.of(context);
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -518,6 +520,19 @@ class ProfileScreen extends ConsumerWidget {
             Text('NewsNow v${AppConstants.appVersion}'),
             const SizedBox(height: 8),
             const Text('一个简洁的资讯聚合应用'),
+            const SizedBox(height: 8),
+            _buildLinkItem(
+              context,
+              label: '数据来源：',
+              url: 'https://github.com/ourongxing/newsnow',
+              theme: theme,
+            ),
+            _buildLinkItem(
+              context,
+              label: '当前项目：',
+              url: 'https://github.com/duanyucong/flutter_news_now',
+              theme: theme,
+            ),
           ],
         ),
         actions: [
@@ -526,6 +541,43 @@ class ProfileScreen extends ConsumerWidget {
             child: const Text('确定'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLinkItem(BuildContext context, {required String label, required String url, required ThemeData theme}) {
+    return GestureDetector(
+      onTap: () async {
+        // 复制到剪切板
+        await Clipboard.setData(ClipboardData(text: url));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('已复制：$url'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      },
+      child: RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: label,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.textTheme.bodyMedium?.color,
+              ),
+            ),
+            TextSpan(
+              text: url,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: Colors.blue,
+                decoration: TextDecoration.underline,
+                decorationColor: Colors.blue,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
