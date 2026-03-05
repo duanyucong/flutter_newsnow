@@ -41,6 +41,8 @@ class ProfileScreen extends ConsumerWidget {
   }
 
   Widget _buildHeader(BuildContext context, User user, ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       width: double.infinity,
       padding: EdgeInsets.only(
@@ -49,23 +51,31 @@ class ProfileScreen extends ConsumerWidget {
         left: 20,
         right: 20,
       ),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFE3F2FD),
-            Color(0xFFBBDEFB),
-            Color(0xFF90CAF9),
-          ],
+          colors: isDark
+              ? [
+                  const Color(0xFF1A237E),
+                  const Color(0xFF283593),
+                  const Color(0xFF3949AB),
+                ]
+              : [
+                  const Color(0xFFE3F2FD),
+                  const Color(0xFFBBDEFB),
+                  const Color(0xFF90CAF9),
+                ],
         ),
-        borderRadius: BorderRadius.only(
+        borderRadius: const BorderRadius.only(
           bottomLeft: Radius.circular(30),
           bottomRight: Radius.circular(30),
         ),
         boxShadow: [
           BoxShadow(
-            color: Color(0xFF90CAF9),
+            color: isDark
+                ? const Color(0xFF3949AB).withValues(alpha: 0.5)
+                : const Color(0xFF90CAF9).withValues(alpha: 0.5),
             blurRadius: 10,
             offset: const Offset(0, 5),
           ),
@@ -78,10 +88,14 @@ class ProfileScreen extends ConsumerWidget {
             width: 100,
             height: 100,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.5),
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.15)
+                  : Colors.white.withValues(alpha: 0.5),
               shape: BoxShape.circle,
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.8),
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.3)
+                    : Colors.white.withValues(alpha: 0.8),
                 width: 2,
               ),
               boxShadow: [
@@ -95,7 +109,7 @@ class ProfileScreen extends ConsumerWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(50),
               child: Container(
-                color: Colors.white,
+                color: isDark ? const Color(0xFF1A237E) : Colors.white,
                 child: Image.asset(
                   'assets/icons/app_icon.png',
                   width: 100,
@@ -111,7 +125,9 @@ class ProfileScreen extends ConsumerWidget {
             '想你所想，见我所见',
             style: TextStyle(
               fontSize: 16,
-              color: Colors.grey.shade700,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.9)
+                  : Colors.grey.shade700,
               fontWeight: FontWeight.w500,
               letterSpacing: 2,
             ),
