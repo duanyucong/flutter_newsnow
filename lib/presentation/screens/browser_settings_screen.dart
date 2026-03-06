@@ -75,13 +75,44 @@ class BrowserSettingsScreen extends ConsumerWidget {
           ),
           _buildSectionHeader('显示', theme),
           _buildTextSizeTile(context, ref, settings.textSize, theme),
-          _buildSectionHeader('关于', theme),
-          _buildInfoTile(
-            context: context,
-            title: '版本',
-            subtitle: '1.0.0',
-            icon: Icons.info_outline,
-            iconColor: Colors.grey,
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: OutlinedButton.icon(
+              onPressed: () => _showResetDialog(context, ref),
+              icon: const Icon(Icons.restore),
+              label: const Text('恢复默认设置'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          const SizedBox(height: 40),
+        ],
+      ),
+    );
+  }
+
+  void _showResetDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('恢复默认设置'),
+        content: const Text('确定要将所有浏览设置恢复为默认值吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              ref.read(webViewSettingsProvider.notifier).reset();
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('已恢复默认设置')),
+              );
+            },
+            child: const Text('确定'),
           ),
         ],
       ),
@@ -182,43 +213,6 @@ class BrowserSettingsScreen extends ConsumerWidget {
             ),
             const Text('大'),
           ],
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      ),
-    );
-  }
-
-  Widget _buildInfoTile({
-    required BuildContext context,
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color iconColor,
-  }) {
-    final theme = Theme.of(context);
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
-      ),
-      child: ListTile(
-        leading: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: iconColor.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: iconColor, size: 18),
-        ),
-        title: Text(title, style: theme.textTheme.bodyLarge),
-        trailing: Text(
-          subtitle,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.textTheme.bodySmall?.color,
-          ),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       ),

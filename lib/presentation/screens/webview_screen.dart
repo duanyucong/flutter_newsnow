@@ -38,6 +38,7 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
   late bool _isDarkMode;
   String? _lastNavigatedUrl;
   int _redirectCount = 0;
+  late WebViewSettings _webViewSettings;
 
   final List<String> _blockedSchemes = [
     'zhihu://',
@@ -55,7 +56,8 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
   @override
   void initState() {
     super.initState();
-    _isDarkMode = _calculateIsDarkMode() || ref.read(webViewSettingsProvider).darkModeEnabled;
+    _webViewSettings = ref.read(webViewSettingsProvider);
+    _isDarkMode = _calculateIsDarkMode() || _webViewSettings.darkModeEnabled;
     _recordReadHistory();
     _initWebView();
   }
@@ -82,18 +84,17 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
   }
 
   void _initWebView() {
-    final webViewSettings = ref.read(webViewSettingsProvider);
     final bgColor = _isDarkMode ? Colors.black : Colors.white;
     
-    final userAgent = webViewSettings.desktopMode
+    final userAgent = _webViewSettings.desktopMode
         ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         : 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
     
     _controller = WebViewController()
-      ..setJavaScriptMode(webViewSettings.javascriptEnabled ? JavaScriptMode.unrestricted : JavaScriptMode.disabled)
+      ..setJavaScriptMode(_webViewSettings.javascriptEnabled ? JavaScriptMode.unrestricted : JavaScriptMode.disabled)
       ..setUserAgent(userAgent)
       ..setBackgroundColor(bgColor)
-      ..enableZoom(!webViewSettings.noImageMode)
+      ..enableZoom(!_webViewSettings.noImageMode)
       ..setOnConsoleMessage((JavaScriptConsoleMessage message) {
         // 过滤掉已知的非关键错误日志
         final ignoredPatterns = [
@@ -210,34 +211,110 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
   }
 
   Future<void> _injectDarkModeCss() async {
-    if (_isDarkMode) {
+    final noImageMode = _webViewSettings.noImageMode;
+    final darkMode = _isDarkMode;
+    final textSize = _webViewSettings.textSize;
+    
+    var css = '';
+    
+    if (darkMode) {
+      css += '''
+        html {
+          filter: invert(1) hue-rotate(180deg) !important;
+          background-color: #000 !important;
+        }
+        img, video, picture, canvas, svg, [style*="background-image"] {
+          filter: invert(1) hue-rotate(180deg) !important;
+        }
+        body {
+          background-color: #000 !important;
+        }
+      ''';
+    }
+    
+    if (noImageMode) {
+      css += '''
+        img, picture, video, canvas, svg, [style*="background-image"], 
+        iframe[src*=".jpg"], iframe[src*=".jpeg"], iframe[src*=".png"], 
+        iframe[src*=".gif"], iframe[src*=".webp"] {
+          display: none !important;
+          visibility: hidden !important;
+        }
+      ''';
+    }
+    
+    if (textSize != 16) {
+      css += '''
+        html {
+          font-size: ${textSize}px !important;
+        }
+        body, p, span, div, article, section, li, td, th {
+          font-size: inherit !important;
+          line-height: inherit !important;
+        }
+      ''';
+    }
+    
+    if (_webViewSettings.adBlockEnabled) {
+      css += '''
+        [id*="google_ads"], [id*="ads-container"], [class*="ads-"], [class*="advertisement"],
+        .ad-container, .ad-wrapper, .ad-banner, .ad-box, .ad-slot, .adsbygoogle,
+        .sponsored, .sponsored-content, .promotion, .promo-banner,
+        ins.adsbygoogle, div[id^="google_ads"], iframe[src*="doubleclick"],
+        iframe[src*="googlesyndication"], iframe[src*="googleadservices"],
+        [class*="banner-ad"], [id*="banner-ad"], .ad-popup, .ad-modal {
+          display: none !important;
+          visibility: hidden !important;
+          height: 0 !important;
+          width: 0 !important;
+          overflow: hidden !important;
+        }
+      ''';
+    }
+    
+    if (darkMode || noImageMode || textSize != 16) {
       await _controller.runJavaScript('''
         (function() {
-          if (!document.getElementById('dark-mode-style')) {
+          var existingStyle = document.getElementById('webview-style');
+          if (!existingStyle) {
             var style = document.createElement('style');
-            style.id = 'dark-mode-style';
-            style.innerHTML = `
-              html {
-                filter: invert(1) hue-rotate(180deg) !important;
-                background-color: #000 !important;
-              }
-              img, video, picture, canvas, svg, [style*="background-image"] {
-                filter: invert(1) hue-rotate(180deg) !important;
-              }
-              body {
-                background-color: #000 !important;
-              }
-            `;
+            style.id = 'webview-style';
             document.head.appendChild(style);
           }
+          var style = document.getElementById('webview-style');
+          style.innerHTML = `$css`;
+          
+          // 监听新加载的图片并隐藏（仅在无图模式下）
+          if (window.imageObserver) {
+            window.imageObserver.disconnect();
+          }
+          ${noImageMode ? '''
+          window.imageObserver = new MutationObserver(function(mutations) {
+            var elements = document.querySelectorAll('img, picture, video, [style*="background-image"]');
+            elements.forEach(function(el) {
+              el.style.display = 'none';
+              el.style.visibility = 'hidden';
+            });
+          });
+          window.imageObserver.observe(document.body, { 
+            childList: true, 
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['src', 'style']
+          });
+          ''' : ''}
         })();
       ''');
     } else {
       await _controller.runJavaScript('''
         (function() {
-          var style = document.getElementById('dark-mode-style');
+          var style = document.getElementById('webview-style');
           if (style) {
-            style.remove();
+            style.innerHTML = '';
+          }
+          if (window.imageObserver) {
+            window.imageObserver.disconnect();
+            window.imageObserver = null;
           }
         })();
       ''');
@@ -327,32 +404,6 @@ class _WebViewScreenState extends ConsumerState<WebViewScreen> {
         _hasError = true;
         _isLoading = false;
         _lastError = '网络连接失败，请检查网络后重试';
-      });
-    }
-  }
-
-  Future<void> _retryWithAlternateUrl() async {
-    final url = widget.url;
-    if (url.startsWith('https://')) {
-      final httpUrl = url.replaceFirst('https://', 'http://');
-      debugPrint('Retrying with HTTP: $httpUrl');
-      try {
-        await _controller.loadRequest(Uri.parse(httpUrl));
-      } catch (e) {
-        debugPrint('HTTP retry failed: $e');
-        await _controller.loadHtmlString('<html><body></body></html>');
-        setState(() {
-          _hasError = true;
-          _isLoading = false;
-          _lastError = '无法加载网页';
-        });
-      }
-    } else {
-      await _controller.loadHtmlString('<html><body></body></html>');
-      setState(() {
-        _hasError = true;
-        _isLoading = false;
-        _lastError = '无法加载网页';
       });
     }
   }

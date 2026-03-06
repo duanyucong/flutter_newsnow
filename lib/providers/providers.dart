@@ -141,6 +141,11 @@ class WebViewSettingsNotifier extends StateNotifier<WebViewSettings> {
     state = state.copyWith(textSize: value);
     _saveSettings();
   }
+
+  void reset() {
+    state = const WebViewSettings();
+    _saveSettings();
+  }
 }
 
 class ThemeModeNotifier extends StateNotifier<AppThemeMode> {

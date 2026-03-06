@@ -36,7 +36,7 @@ class News {
       description: json['description'] ?? '',
       content: json['content'] ?? '',
       source: json['source'] ?? '',
-      sourceId: json['source_id'] ?? '',
+      sourceId: json['sourceId'] ?? json['source_id'] ?? '',
       time: json['time'] ?? '',
       timestamp: json['timestamp'] ?? 0,
       imageUrl: json['image_url'],
