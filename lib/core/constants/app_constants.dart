@@ -1,6 +1,6 @@
 class AppConstants {
   static const String appName = 'NewsNow';
-  static const String appVersion = '0.0.39';
+  static const String appVersion = '26.3.6';
   
   // API Base URL (mock for now)
   static const String baseUrl = 'https://api.newsnow.example.com';
