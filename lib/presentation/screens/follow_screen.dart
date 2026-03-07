@@ -14,65 +14,79 @@ class FollowScreen extends ConsumerWidget {
     final newsAsync = ref.watch(followNewsProvider);
     final followSources = ref.watch(followSourcesProvider);
     final selectedSource = ref.watch(followSourceProvider);
+    final isRefreshing = ref.watch(followIsRefreshingProvider);
 
     return SafeArea(
-      child: Column(
+      child: Stack(
         children: [
-          FollowNav(
-            sources: followSources,
-            selectedSource: selectedSource,
-            onSourceSelected: (sourceId) {
-              ref.read(followSourceProvider.notifier).state = sourceId;
-            },
-          ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async {
-                await ref.read(followNewsProvider.notifier).refresh();
-              },
-              child: newsAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text('加载失败: $error'),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () => ref.read(followNewsProvider.notifier).refresh(),
-                        child: const Text('重试'),
-                      ),
-                    ],
-                  ),
-                ),
-                data: (news) {
-                  final scrollController = ref.watch(scrollControllersProvider)[2];
-                  return ListView.builder(
-                    controller: scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: news.length + 1,
-                    itemBuilder: (context, index) {
-                      if (index == news.length) {
-                        return const Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Center(child: Text('暂无更多')),
-                        );
-                      }
-                      final item = news[index];
-                      final sourceConfig = Sources.getSource(item.sourceId);
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: NewsCard(
-                          news: item,
-                          onTap: () => _openWebView(context, item, sourceConfig),
-                        ),
-                      );
-                    },
-                  );
+          Column(
+            children: [
+              FollowNav(
+                sources: followSources,
+                selectedSource: selectedSource,
+                onSourceSelected: (sourceId) {
+                  ref.read(followSourceProvider.notifier).state = sourceId;
                 },
               ),
-            ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    await ref.read(followNewsProvider.notifier).refresh();
+                  },
+                  child: newsAsync.when(
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (error, _) => Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text('加载失败: $error'),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () => ref.read(followNewsProvider.notifier).refresh(),
+                            child: const Text('重试'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    data: (news) {
+                      final scrollController = ref.watch(scrollControllersProvider)[2];
+                      return ListView.builder(
+                        controller: scrollController,
+                        padding: const EdgeInsets.all(16),
+                        itemCount: news.length + 1,
+                        itemBuilder: (context, index) {
+                          if (index == news.length) {
+                            return const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Center(child: Text('暂无更多')),
+                            );
+                          }
+                          final item = news[index];
+                          final sourceConfig = Sources.getSource(item.sourceId);
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: NewsCard(
+                              news: item,
+                              onTap: () => _openWebView(context, item, sourceConfig),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
           ),
+          if (isRefreshing)
+            Positioned.fill(
+              child: Container(
+                color: Colors.transparent,
+                child: const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+            ),
         ],
       ),
     );

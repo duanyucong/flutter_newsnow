@@ -426,6 +426,10 @@ Future<void> _saveCachedNews(String cacheKey, List<News> news) async {
   await prefs.setStringList(cacheKey, newsJson);
 }
 
+final hotIsRefreshingProvider = StateProvider<bool>((ref) => false);
+final liveIsRefreshingProvider = StateProvider<bool>((ref) => false);
+final followIsRefreshingProvider = StateProvider<bool>((ref) => false);
+
 final hotNewsProvider = StateNotifierProvider<HotNewsNotifier, AsyncValue<List<News>>>((ref) {
   final notifier = HotNewsNotifier(ref);
   ref.listen(hottestSourcesProvider, (_, __) {
@@ -492,7 +496,9 @@ class HotNewsNotifier extends StateNotifier<AsyncValue<List<News>>> {
 
   Future<void> refresh() async {
     _isInitialLoad = false;
+    ref.read(hotIsRefreshingProvider.notifier).state = true;
     await loadNews();
+    ref.read(hotIsRefreshingProvider.notifier).state = false;
   }
 }
 
@@ -561,7 +567,10 @@ class LiveNewsNotifier extends StateNotifier<AsyncValue<List<News>>> {
   }
 
   Future<void> refresh() async {
+    _isInitialLoad = false;
+    ref.read(liveIsRefreshingProvider.notifier).state = true;
     await loadNews();
+    ref.read(liveIsRefreshingProvider.notifier).state = false;
   }
 }
 
@@ -625,7 +634,10 @@ class FollowNewsNotifier extends StateNotifier<AsyncValue<List<News>>> {
   }
 
   Future<void> refresh() async {
+    _isInitialLoad = false;
+    ref.read(followIsRefreshingProvider.notifier).state = true;
     await loadNews();
+    ref.read(followIsRefreshingProvider.notifier).state = false;
   }
 }
 

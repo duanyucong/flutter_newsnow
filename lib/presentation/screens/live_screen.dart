@@ -12,74 +12,88 @@ class LiveScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final newsAsync = ref.watch(liveNewsProvider);
+    final isRefreshing = ref.watch(liveIsRefreshingProvider);
     final theme = Theme.of(context);
 
     return SafeArea(
-      child: RefreshIndicator(
-        onRefresh: () async {
-          await ref.read(liveNewsProvider.notifier).refresh();
-        },
-        child: newsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text('加载失败: $error'),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () => ref.read(liveNewsProvider.notifier).refresh(),
-                  child: const Text('重试'),
+      child: Stack(
+        children: [
+          RefreshIndicator(
+            onRefresh: () async {
+              await ref.read(liveNewsProvider.notifier).refresh();
+            },
+            child: newsAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, _) => Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('加载失败: $error'),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () => ref.read(liveNewsProvider.notifier).refresh(),
+                      child: const Text('重试'),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+              data: (news) {
+                final scrollController = ref.watch(scrollControllersProvider)[0];
+                return CustomScrollView(
+                  controller: scrollController,
+                  slivers: [
+                    SliverAppBar(
+                      pinned: true,
+                      floating: false,
+                      snap: false,
+                      expandedHeight: 80,
+                      backgroundColor: theme.scaffoldBackgroundColor,
+                      surfaceTintColor: Colors.transparent,
+                      elevation: 0,
+                      flexibleSpace: FlexibleSpaceBar(
+                        title: Text(
+                          '实时',
+                          style: theme.textTheme.headlineLarge,
+                        ),
+                        centerTitle: false,
+                        titlePadding: const EdgeInsets.only(left: 16, bottom: 16),
+                      ),
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            if (index == news.length) {
+                              return const Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Center(child: Text('暂无更多')),
+                              );
+                            }
+                            final item = news[index];
+                            final sourceConfig = Sources.getSource(item.sourceId);
+                            return _buildTimelineItem(context, item, sourceConfig);
+                          },
+                          childCount: news.length + 1,
+                        ),
+                      ),
+                    ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                  ],
+                );
+              },
             ),
           ),
-          data: (news) {
-            final scrollController = ref.watch(scrollControllersProvider)[0];
-            return CustomScrollView(
-              controller: scrollController,
-              slivers: [
-                SliverAppBar(
-                  pinned: true,
-                  floating: false,
-                  snap: false,
-                  expandedHeight: 80,
-                  backgroundColor: theme.scaffoldBackgroundColor,
-                  surfaceTintColor: Colors.transparent,
-                  elevation: 0,
-                  flexibleSpace: FlexibleSpaceBar(
-                    title: Text(
-                      '实时',
-                      style: theme.textTheme.headlineLarge,
-                    ),
-                    centerTitle: false,
-                    titlePadding: const EdgeInsets.only(left: 16, bottom: 16),
-                  ),
+          if (isRefreshing)
+            Positioned.fill(
+              child: Container(
+                color: Colors.transparent,
+                child: const Center(
+                  child: CircularProgressIndicator(),
                 ),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        if (index == news.length) {
-                          return const Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Center(child: Text('暂无更多')),
-                          );
-                        }
-                        final item = news[index];
-                        final sourceConfig = Sources.getSource(item.sourceId);
-                        return _buildTimelineItem(context, item, sourceConfig);
-                      },
-                      childCount: news.length + 1,
-                    ),
-                  ),
-                ),
-                const SliverToBoxAdapter(child: SizedBox(height: 80)),
-              ],
-            );
-          },
-        ),
+              ),
+            ),
+        ],
       ),
     );
   }
