@@ -587,22 +587,37 @@ final followSourceProvider = StateProvider<String>((ref) {
 });
 
 final followNewsProvider = StateNotifierProvider<FollowNewsNotifier, AsyncValue<List<News>>>((ref) {
-  final sourceId = ref.watch(followSourceProvider);
-  return FollowNewsNotifier(ref, sourceId);
+  return FollowNewsNotifier(ref);
 });
 
 class FollowNewsNotifier extends StateNotifier<AsyncValue<List<News>>> {
   final Ref ref;
-  final String sourceId;
+  String _currentSourceId = '';
   List<News> _cachedNews = [];
   bool _isInitialLoad = true;
   
-  FollowNewsNotifier(this.ref, this.sourceId) : super(const AsyncValue.loading()) {
+  FollowNewsNotifier(this.ref) : super(const AsyncValue.loading()) {
+    _init();
+  }
+
+  void _init() {
+    // 监听 sourceId 变化
+    ref.listen<String>(followSourceProvider, (previous, next) {
+      if (previous != next) {
+        _currentSourceId = next;
+        _loadWithCache();
+      }
+    });
+    
+    // 初始加载
+    _currentSourceId = ref.read(followSourceProvider);
     _loadWithCache();
   }
 
   Future<void> _loadWithCache() async {
-    final cacheKey = '${AppConstants.followNewsCacheKey}_$sourceId';
+    if (_currentSourceId.isEmpty) return;
+    
+    final cacheKey = '${AppConstants.followNewsCacheKey}_$_currentSourceId';
     _cachedNews = await _loadCachedNews(cacheKey);
     if (_cachedNews.isNotEmpty) {
       state = AsyncValue.data(_cachedNews);
@@ -611,6 +626,8 @@ class FollowNewsNotifier extends StateNotifier<AsyncValue<List<News>>> {
   }
   
   Future<void> loadNews() async {
+    if (_currentSourceId.isEmpty) return;
+    
     if (_isInitialLoad && _cachedNews.isNotEmpty) {
       state = AsyncValue.data(_cachedNews);
     }
@@ -618,12 +635,12 @@ class FollowNewsNotifier extends StateNotifier<AsyncValue<List<News>>> {
     
     try {
       final repository = ref.read(newsRepositoryProvider);
-      final response = await repository.getSource(sourceId, latest: true);
+      final response = await repository.getSource(_currentSourceId, latest: true);
       
       final news = response.items.map((item) => _convertToNews(item, response.id)).toList();
       
       _cachedNews = news;
-      final cacheKey = '${AppConstants.followNewsCacheKey}_$sourceId';
+      final cacheKey = '${AppConstants.followNewsCacheKey}_$_currentSourceId';
       await _saveCachedNews(cacheKey, news);
       state = AsyncValue.data(news);
     } catch (e, st) {
