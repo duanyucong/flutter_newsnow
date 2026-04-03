@@ -305,25 +305,155 @@ final realtimeSourcesProvider = Provider<List<String>>((ref) {
   return subscribedRealtime;
 });
 
-News _convertToNews(NewsItem item, String sourceId) {
-  final source = Sources.getSource(sourceId);
-  final dateValue = item.extra?.date;
-  String timeStr = '';
-  int timestamp = 0;
-  
-  if (dateValue is int) {
-    timestamp = dateValue;
-    timeStr = _formatRelativeTime(dateValue);
-  } else if (dateValue is String) {
-    try {
-      timestamp = int.parse(dateValue);
-      timeStr = _formatRelativeTime(timestamp);
-    } catch (_) {
-      timeStr = dateValue;
-    }
-  } else {
-    timeStr = item.extra?.date?.toString() ?? '';
+/// 从 NewsItem 中提取时间戳（毫秒）
+/// 
+/// 支持多种时间格式：
+/// 1. NewsItem.extra.date (int 毫秒时间戳)
+/// 2. NewsItem.extra.date (String 可解析为数字)
+/// 3. NewsItem.pubDate (int 毫秒时间戳)
+/// 4. NewsItem.pubDate (String 日期格式："yyyy-MM-dd HH:mm:ss")
+/// 5. SourceResponse.updatedTime (作为最后备选)
+int? extractTimestamp(NewsItem item, {int? sourceUpdatedTime}) {
+  // 优先级 1: extra.date (int 类型)
+  final extraDate = item.extra?.date;
+  if (extraDate is int) {
+    return extraDate;
   }
+  
+  // 优先级 2: extra.date (String 类型，尝试解析为数字)
+  if (extraDate is String) {
+    // 尝试直接转换为数字
+    final numericValue = int.tryParse(extraDate);
+    if (numericValue != null) {
+      return numericValue;
+    }
+    // 尝试解析日期字符串
+    final dateTime = _parseDateTime(extraDate);
+    if (dateTime != null) {
+      return dateTime.millisecondsSinceEpoch;
+    }
+  }
+  
+  // 优先级 3: pubDate (int 类型)
+  final pubDate = item.pubDate;
+  if (pubDate is int) {
+    return pubDate;
+  }
+  
+  // 优先级 4: pubDate (String 类型，尝试解析)
+  if (pubDate is String) {
+    // 尝试直接转换为数字
+    final numericValue = int.tryParse(pubDate);
+    if (numericValue != null) {
+      return numericValue;
+    }
+    // 尝试解析日期字符串
+    final dateTime = _parseDateTime(pubDate);
+    if (dateTime != null) {
+      return dateTime.millisecondsSinceEpoch;
+    }
+  }
+  
+  // 优先级 5: 使用源的更新时间作为备选
+  if (sourceUpdatedTime is int) {
+    return sourceUpdatedTime;
+  }
+  
+  return null;
+}
+
+/// 解析日期字符串
+/// 
+/// 支持的格式：
+/// - "yyyy-MM-dd HH:mm:ss"
+/// - "yyyy/MM/dd HH:mm:ss"
+/// - "yyyy-MM-ddTHH:mm:ss"
+/// - "yyyy-MM-dd"
+DateTime? _parseDateTime(String dateStr) {
+  if (dateStr.isEmpty) return null;
+  
+  try {
+    // 尝试常见格式
+    final formats = [
+      'yyyy-MM-dd HH:mm:ss',
+      'yyyy/MM/dd HH:mm:ss',
+      'yyyy-MM-ddTHH:mm:ss',
+      'yyyy-MM-dd',
+      'MM-dd HH:mm:ss',
+    ];
+    
+    for (final format in formats) {
+      try {
+        return DateFormat(format).parse(dateStr);
+      } catch (_) {
+        continue;
+      }
+    }
+    
+    // 如果所有格式都失败，尝试让 DateFormat 自动推断
+    return DateFormat().parse(dateStr);
+  } catch (e) {
+    debugPrint('解析日期失败：$dateStr, 错误：$e');
+    return null;
+  }
+}
+
+/// 格式化相对时间
+/// 
+/// 将时间戳转换为人类可读的相对时间描述
+String _formatRelativeTime(int timestamp) {
+  if (timestamp == 0) return '';
+  
+  final nowMilliseconds = DateTime.now().millisecondsSinceEpoch;
+  final diff = nowMilliseconds - timestamp;
+  
+  // 未来时间（可能是时钟不同步）
+  if (diff < 0) {
+    return '刚刚';
+  }
+  
+  // 不到 1 分钟
+  if (diff < 60000) {
+    return '刚刚';
+  }
+  // 不到 1 小时
+  else if (diff < 3600000) {
+    final minutes = diff ~/ 60000;
+    return '$minutes分钟前';
+  }
+  // 不到 1 天
+  else if (diff < 86400000) {
+    final hours = diff ~/ 3600000;
+    return '$hours小时前';
+  }
+  // 不到 7 天
+  else if (diff < 604800000) {
+    final days = diff ~/ 86400000;
+    return '$days天前';
+  }
+  // 超过 7 天，显示具体日期
+  else {
+    final dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
+    final now = DateTime.now();
+    final isCurrentYear = dateTime.year == now.year;
+    
+    if (isCurrentYear) {
+      return DateFormat('MM-dd').format(dateTime);
+    } else {
+      return DateFormat('yyyy-MM-dd').format(dateTime);
+    }
+  }
+}
+
+News _convertToNews(NewsItem item, String sourceId, {int? sourceUpdatedTime}) {
+  final source = Sources.getSource(sourceId);
+  
+  // 提取并转换时间戳
+  final timestamp = extractTimestamp(item, sourceUpdatedTime: sourceUpdatedTime);
+  final validTimestamp = timestamp ?? 0;
+  
+  // 格式化相对时间
+  final timeStr = _formatRelativeTime(validTimestamp);
   
   return News(
     id: item.newsId,
@@ -333,33 +463,12 @@ News _convertToNews(NewsItem item, String sourceId) {
     source: source?.name ?? sourceId,
     sourceId: sourceId,
     time: timeStr,
-    timestamp: timestamp,
+    timestamp: validTimestamp,
     url: item.displayUrl,
     likes: 0,
     comments: 0,
     category: source?.column ?? 'hot',
   );
-}
-
-String _formatRelativeTime(int timestamp) {
-  if (timestamp == 0) return '';
-  
-  final nowSeconds = DateTime.now().millisecondsSinceEpoch;
-  final diff = nowSeconds - timestamp;
-  
-  if (diff < 60000) {
-    return '刚刚';
-  } else if (diff < 3600000) {
-    return '${diff ~/ 60000}分钟前';
-  } else if (diff < 86400000) {
-    return '${diff ~/ 3600000}小时前';
-  } else if (diff < 604800000) {
-    return '${diff ~/ 86400000}天前';
-  } else {
-    return '更久前';
-    // final dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
-    // return DateFormat('MM-dd').format(dateTime);
-  }
 }
 
 List<News> _interleaveBySource(List<SourceResponse> responses) {
@@ -371,7 +480,9 @@ List<News> _interleaveBySource(List<SourceResponse> responses) {
   for (int i = 0; i < maxItems; i++) {
     for (final response in responses) {
       if (i < response.items.length) {
-        result.add(_convertToNews(response.items[i], response.id));
+        final item = response.items[i];
+        // 传递源的更新时间作为备选
+        result.add(_convertToNews(item, response.id, sourceUpdatedTime: response.updatedTime as int?));
       }
     }
   }
@@ -382,9 +493,13 @@ List<News> _interleaveBySource(List<SourceResponse> responses) {
 List<News> _sortNews(List<News> news) {
   final sorted = List<News>.from(news);
   sorted.sort((a, b) {
-    final timestampCompare = b.timestamp.compareTo(a.timestamp);
-    if (timestampCompare != 0) return timestampCompare;
+    // 首先按时间戳排序（最新的在前）
+    if (a.timestamp > 0 && b.timestamp > 0) {
+      final timestampCompare = b.timestamp.compareTo(a.timestamp);
+      if (timestampCompare != 0) return timestampCompare;
+    }
     
+    // 如果时间戳相同或都为 0，按标题首字母排序
     final aFirstLetter = _getFirstLetter(a.title);
     final bFirstLetter = _getFirstLetter(b.title);
     return aFirstLetter.compareTo(bFirstLetter);
